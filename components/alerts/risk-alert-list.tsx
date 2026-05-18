@@ -14,13 +14,13 @@ type RiskAlertListProps = {
 
 export function RiskAlertList({ alerts }: RiskAlertListProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-slate-700">Student Risk Alerts</h3>
+    <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-50 p-5 shadow-sm backdrop-blur">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-slate-800">Student Risk Alerts</h3>
       <div className="space-y-3">
         {alerts.map((alert) => (
           <article
             key={alert.id}
-            className="rounded-xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-3 transition-transform duration-200 hover:-translate-y-0.5"
+            className="rounded-xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
           >
             <div className="mb-1 flex items-center justify-between gap-2">
               <Link href={`/students/${alert.studentId}`} className="text-sm font-semibold text-slate-900 hover:underline">
