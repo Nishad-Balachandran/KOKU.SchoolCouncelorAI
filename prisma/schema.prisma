@@ -1,0 +1,597 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  DISTRICT_ADMIN
+  SCHOOL_ADMIN
+  COUNSELOR
+  SUPPORT_STAFF
+  READ_ONLY
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  TRANSFERRED
+  GRADUATED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertType {
+  GRADE_DROP
+  CHRONIC_ABSENTEEISM
+  BEHAVIOR_INCIDENT
+  MISSED_INTERVENTION
+  GRADUATION_RISK
+  WELLNESS_CONCERN
+  CRISIS_FLAG
+  OTHER
+}
+
+enum AlertStatus {
+  OPEN
+  IN_REVIEW
+  ESCALATED
+  RESOLVED
+  DISMISSED
+}
+
+enum InterventionStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum InterventionTier {
+  TIER_1
+  TIER_2
+  TIER_3
+}
+
+enum CommunicationChannel {
+  EMAIL
+  SMS
+  PHONE
+  IN_APP
+  LETTER
+  OTHER
+}
+
+enum CommunicationDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum CommunicationStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  FAILED
+  RECEIVED
+  CANCELLED
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum DocumentType {
+  PDF
+  CSV
+  NOTE
+  REPORT
+  TRANSCRIPT
+  CAREER_ASSESSMENT
+  OTHER
+}
+
+enum DocumentParseStatus {
+  NOT_STARTED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AuditAction {
+  AI_GENERATE
+  AI_EDIT
+  AI_REVIEW_REQUEST
+  AI_APPROVE
+  AI_REJECT
+  AI_SAVE
+  AI_SEND
+  MANUAL_OVERRIDE
+}
+
+enum RiskCategory {
+  ACADEMIC
+  ATTENDANCE
+  BEHAVIOR
+  WELLNESS
+  GRADUATION
+  OTHER
+}
+
+enum CollegeApplicationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  WAITLISTED
+  WITHDRAWN
+}
+
+model School {
+  id                   String               @id @default(cuid())
+  name                 String
+  districtName         String?
+  stateCode            String?
+  timezone             String?              @default("America/New_York")
+  ascaRecommendedRatio Int                  @default(250)
+
+  users                User[]
+  students             Student[]
+  guardians            Guardian[]
+  communications       Communication[]
+  meetings             Meeting[]
+  tasks                Task[]
+  documents            Document[]
+  aiAuditLogs          AIAuditLog[]
+
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([districtName])
+  @@index([stateCode])
+}
+
+model User {
+  id                  String            @id @default(cuid())
+  schoolId            String
+  email               String            @unique
+  fullName            String
+  role                UserRole          @default(COUNSELOR)
+  isActive            Boolean           @default(true)
+
+  school              School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  assignedStudents    Student[]         @relation("PrimaryCounselorStudents")
+  authoredNotes       CounselorNote[]
+  createdInterventions Intervention[]   @relation("InterventionCreatedBy")
+  assignedInterventions Intervention[]  @relation("InterventionAssignedTo")
+  createdAlerts       RiskAlert[]       @relation("RiskAlertCreatedBy")
+  assignedAlerts      RiskAlert[]       @relation("RiskAlertAssignedTo")
+  communications      Communication[]   @relation("CommunicationCreatedBy")
+  reviewedCommunications Communication[] @relation("CommunicationReviewedBy")
+  meetingsCreated     Meeting[]         @relation("MeetingCreatedBy")
+  tasksCreated        Task[]            @relation("TaskCreatedBy")
+  tasksAssigned       Task[]            @relation("TaskAssignedTo")
+  aiAuditLogs         AIAuditLog[]
+  documentsUploaded   Document[]        @relation("DocumentUploadedBy")
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([schoolId, role])
+}
+
+model Student {
+  id                         String               @id @default(cuid())
+  schoolId                   String
+  primaryCounselorId         String?
+  studentExternalId          String?
+  firstName                  String
+  lastName                   String
+  preferredName              String?
+  gradeLevel                 Int
+  status                     StudentStatus        @default(ACTIVE)
+  dateOfBirth                DateTime?
+
+  gpa                        Float?
+  creditsEarned              Float?
+  creditsRequired            Float?
+  attendanceRate             Float?
+  attendanceDaysAbsent       Int?                 @default(0)
+  behaviorIncidentCount      Int?                 @default(0)
+
+  riskScore                  Float?               @default(0)
+  riskLevel                  RiskLevel            @default(LOW)
+  riskLastCalculatedAt       DateTime?
+
+  school                     School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  primaryCounselor           User?                @relation("PrimaryCounselorStudents", fields: [primaryCounselorId], references: [id], onDelete: SetNull)
+  guardians                  StudentGuardian[]
+  notes                      CounselorNote[]
+  interventions              Intervention[]
+  riskAlerts                 RiskAlert[]
+  communications             Communication[]
+  meetings                   Meeting[]
+  tasks                      Task[]
+  documents                  Document[]
+  aiAuditLogs                AIAuditLog[]
+  metrics                    StudentMetric[]
+  careerPlan                 CareerPlan?
+  collegeApplications        CollegeApplication[]
+
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+
+  @@unique([schoolId, studentExternalId])
+  @@index([schoolId, gradeLevel])
+  @@index([primaryCounselorId])
+  @@index([riskLevel])
+}
+
+model Guardian {
+  id                     String              @id @default(cuid())
+  schoolId               String
+  firstName              String
+  lastName               String
+  email                  String?
+  phone                  String?
+  preferredLanguage      String?             @default("en")
+  relationshipToStudent  String?
+  canReceiveComms        Boolean             @default(true)
+
+  school                  School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students                StudentGuardian[]
+  communications          Communication[]
+
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@index([schoolId])
+  @@index([email])
+}
+
+model StudentGuardian {
+  id                String    @id @default(cuid())
+  studentId         String
+  guardianId        String
+  isPrimaryContact  Boolean   @default(false)
+  legalAuthority    Boolean   @default(false)
+
+  student           Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian          Guardian  @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  createdAt         DateTime  @default(now())
+
+  @@unique([studentId, guardianId])
+  @@index([guardianId])
+}
+
+model CounselorNote {
+  id                       String      @id @default(cuid())
+  studentId                String
+  authorId                 String
+  title                    String?
+  rawText                  String?
+  structuredSummary        String?
+  aiGeneratedDraft         String?
+  isAiDraft                Boolean     @default(false)
+  approvedByHuman          Boolean     @default(false)
+  ferpaSafe                Boolean     @default(true)
+  containsSensitiveContent Boolean     @default(false)
+  reviewedAt               DateTime?
+
+  student                  Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  author                   User        @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+
+  @@index([studentId, createdAt])
+  @@index([authorId])
+}
+
+model Intervention {
+  id                      String               @id @default(cuid())
+  studentId               String
+  createdById             String
+  assignedToId            String?
+  title                   String
+  description             String?
+  tier                    InterventionTier     @default(TIER_1)
+  status                  InterventionStatus   @default(PLANNED)
+  dueDate                 DateTime?
+  completedAt             DateTime?
+  outcomeSummary          String?
+  effectivenessScore      Float?
+  requiresParentContact   Boolean              @default(false)
+  requiresHumanApproval   Boolean              @default(true)
+
+  student                 Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdBy               User                 @relation("InterventionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo              User?                @relation("InterventionAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  @@index([studentId, status])
+  @@index([assignedToId])
+  @@index([dueDate])
+}
+
+model RiskAlert {
+  id                      String       @id @default(cuid())
+  studentId               String
+  createdById             String?
+  assignedToId            String?
+  type                    AlertType
+  category                RiskCategory @default(OTHER)
+  level                   RiskLevel
+  score                   Float?
+  status                  AlertStatus  @default(OPEN)
+
+  title                   String
+  explanation             String
+  evidence                Json?
+  recommendation          String?
+  explainabilityVersion   String?
+  flaggedAt               DateTime     @default(now())
+  resolvedAt              DateTime?
+
+  requiresHumanReview     Boolean      @default(true)
+  reviewedByHuman         Boolean      @default(false)
+  humanReviewNotes        String?
+
+  student                 Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdBy               User?        @relation("RiskAlertCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assignedTo              User?        @relation("RiskAlertAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  @@index([studentId, status])
+  @@index([assignedToId])
+  @@index([type, level])
+}
+
+model Communication {
+  id                     String                  @id @default(cuid())
+  schoolId               String
+  studentId              String?
+  guardianId             String?
+  createdById            String
+  reviewedById           String?
+
+  channel                CommunicationChannel
+  direction              CommunicationDirection  @default(OUTBOUND)
+  status                 CommunicationStatus     @default(DRAFT)
+
+  subject                String?
+  body                   String
+  translatedBody         String?
+  languageCode           String?                 @default("en")
+
+  aiGenerated            Boolean                 @default(false)
+  requiresApproval       Boolean                 @default(true)
+  approvedAt             DateTime?
+  sentAt                 DateTime?
+  deliveryMetadata       Json?
+
+  school                 School                  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student                Student?                @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  guardian               Guardian?               @relation(fields: [guardianId], references: [id], onDelete: SetNull)
+  createdBy              User                    @relation("CommunicationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy             User?                   @relation("CommunicationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@index([schoolId, status])
+  @@index([studentId])
+  @@index([guardianId])
+}
+
+model Meeting {
+  id                      String        @id @default(cuid())
+  schoolId                String
+  studentId               String?
+  createdById             String
+
+  title                   String
+  agenda                  String?
+  startAt                 DateTime
+  endAt                   DateTime
+  location                String?
+  status                  MeetingStatus @default(SCHEDULED)
+
+  aiAgendaDraft           String?
+  aiSummaryDraft          String?
+  summaryApprovedByHuman  Boolean       @default(false)
+
+  school                  School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student                 Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  createdBy               User          @relation("MeetingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([schoolId, startAt])
+  @@index([studentId])
+}
+
+model Task {
+  id                      String       @id @default(cuid())
+  schoolId                String
+  studentId               String?
+  createdById             String
+  assignedToId            String?
+
+  title                   String
+  description             String?
+  status                  TaskStatus   @default(TODO)
+  priority                TaskPriority @default(MEDIUM)
+  dueDate                 DateTime?
+  completedAt             DateTime?
+
+  school                  School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student                 Student?     @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  createdBy               User         @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo              User?        @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  @@index([schoolId, status, priority])
+  @@index([assignedToId])
+  @@index([dueDate])
+}
+
+model Document {
+  id                     String              @id @default(cuid())
+  schoolId               String
+  studentId              String?
+  uploadedById           String
+
+  fileName               String
+  storagePath            String
+  mimeType               String
+  byteSize               Int
+  type                   DocumentType        @default(OTHER)
+  parseStatus            DocumentParseStatus @default(NOT_STARTED)
+  extractedText          String?
+  metadata               Json?
+
+  school                 School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student                Student?            @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  uploadedBy             User                @relation("DocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([schoolId, type])
+  @@index([studentId])
+}
+
+model AIAuditLog {
+  id                     String      @id @default(cuid())
+  schoolId               String
+  userId                 String
+  studentId              String?
+
+  action                 AuditAction
+  feature                String
+  modelProvider          String?
+  modelName              String?
+
+  promptHash             String?
+  inputSummary           String?
+  outputSummary          String?
+
+  approvedByHuman        Boolean     @default(false)
+  reviewerId             String?
+  reviewNotes            String?
+  blockedByPolicy        Boolean     @default(false)
+
+  metadata               Json?
+
+  school                 School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user                   User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  student                Student?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  createdAt              DateTime    @default(now())
+
+  @@index([schoolId, action])
+  @@index([userId, createdAt])
+  @@index([studentId])
+}
+
+model StudentMetric {
+  id                     String       @id @default(cuid())
+  studentId              String
+  metricDate             DateTime
+
+  gpa                    Float?
+  attendanceRate         Float?
+  daysAbsent             Int?
+  behaviorIncidentCount  Int?
+  assignmentCompletion   Float?
+
+  riskScore              Float?
+  riskLevel              RiskLevel?
+
+  student                Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt              DateTime     @default(now())
+
+  @@unique([studentId, metricDate])
+  @@index([metricDate])
+}
+
+model CareerPlan {
+  id                        String      @id @default(cuid())
+  studentId                 String      @unique
+
+  careerInterests           String[]
+  recommendedPathways       String[]
+  strengthsSummary          String?
+  nextMilestones            Json?
+
+  scholarshipReminderOptIn  Boolean     @default(true)
+  fafsaReminderOptIn        Boolean     @default(true)
+
+  aiSummaryDraft            String?
+  approvedByHuman           Boolean     @default(false)
+
+  student                   Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+}
+
+model CollegeApplication {
+  id                     String                   @id @default(cuid())
+  studentId              String
+
+  collegeName            String
+  applicationTerm        String?
+  status                 CollegeApplicationStatus @default(NOT_STARTED)
+  deadline               DateTime?
+  submittedAt            DateTime?
+
+  fafsaCompleted         Boolean                  @default(false)
+  scholarshipApplied     Boolean                  @default(false)
+  notes                  String?
+
+  student                Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  @@index([studentId, status])
+  @@index([deadline])
+}

@@ -1,0 +1,200 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+type CopilotTask = "parent_email" | "intervention_plan" | "meeting_agenda" | "note_structuring";
+
+type CopilotPanelProps = {
+  studentName?: string;
+  studentId?: string;
+  schoolId: string;
+  userId: string;
+};
+
+const taskButtons: Array<{ task: CopilotTask; label: string }> = [
+  { task: "parent_email", label: "Draft parent email" },
+  { task: "intervention_plan", label: "Generate intervention plan" },
+  { task: "meeting_agenda", label: "Create meeting agenda" },
+  { task: "note_structuring", label: "Structure counselor notes" },
+];
+
+export function CopilotPanel({ studentName, studentId, schoolId, userId }: CopilotPanelProps) {
+  const [context, setContext] = useState(
+    studentName
+      ? `Student: ${studentName}\nGoal: Build a counselor-ready draft based on current student context.`
+      : "Create a counselor support draft using school-safe language.",
+  );
+  const [loadingTask, setLoadingTask] = useState<CopilotTask | null>(null);
+  const [lastTask, setLastTask] = useState<CopilotTask | null>(null);
+  const [reviewLoading, setReviewLoading] = useState<"approve" | "reject" | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewStatus, setReviewStatus] = useState("");
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+
+  const heading = useMemo(() => {
+    if (studentName) {
+      return `Generate support drafts for ${studentName}.`;
+    }
+
+    return "Generate notes, parent messages, and intervention drafts.";
+  }, [studentName]);
+
+  async function handleGenerate(task: CopilotTask) {
+    setLoadingTask(task);
+    setError("");
+    setReviewStatus("");
+
+    try {
+      const response = await fetch("/api/copilot/draft", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          task,
+          context,
+          schoolId,
+          userId,
+          studentId,
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setError(payload?.message ?? "Failed to generate draft.");
+        return;
+      }
+
+      setDraft(payload.draft ?? "");
+      setLastTask(task);
+    } catch {
+      setError("Unable to generate draft right now.");
+    } finally {
+      setLoadingTask(null);
+    }
+  }
+
+  async function handleReview(decision: "approve" | "reject") {
+    if (!draft || !lastTask) {
+      return;
+    }
+
+    setReviewLoading(decision);
+    setError("");
+    setReviewStatus("");
+
+    try {
+      const response = await fetch("/api/copilot/review", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          schoolId,
+          userId,
+          studentId,
+          task: lastTask,
+          decision,
+          draft,
+          reviewNotes,
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setError(payload?.message ?? "Failed to persist review decision.");
+        return;
+      }
+
+      setReviewStatus(payload?.message ?? "Review decision saved.");
+    } catch {
+      setError("Unable to persist review decision right now.");
+    } finally {
+      setReviewLoading(null);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">AI Counselor Copilot</h3>
+        <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700">Draft only</span>
+      </div>
+      <p className="mb-3 text-sm text-slate-600">{heading}</p>
+
+      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="copilot-context">
+        Context
+      </label>
+      <textarea
+        id="copilot-context"
+        value={context}
+        onChange={(event) => setContext(event.target.value)}
+        className="mb-3 min-h-[110px] w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+      />
+
+      <div className="grid gap-2">
+        {taskButtons.map((item) => (
+          <button
+            key={item.task}
+            type="button"
+            disabled={loadingTask !== null}
+            onClick={() => handleGenerate(item.task)}
+            className="rounded-md border border-slate-300 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingTask === item.task ? "Generating..." : item.label}
+          </button>
+        ))}
+      </div>
+
+      {error ? <p className="mt-3 text-xs text-red-700">{error}</p> : null}
+
+      {draft ? (
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Generated Draft</p>
+          <pre className="whitespace-pre-wrap text-sm text-slate-700">{draft}</pre>
+
+          <label
+            className="mb-2 mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            htmlFor="copilot-review-notes"
+          >
+            Review Notes (Optional)
+          </label>
+          <textarea
+            id="copilot-review-notes"
+            value={reviewNotes}
+            onChange={(event) => setReviewNotes(event.target.value)}
+            className="min-h-[72px] w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          />
+
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={reviewLoading !== null}
+              onClick={() => handleReview("approve")}
+              className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reviewLoading === "approve" ? "Saving..." : "Approve Draft"}
+            </button>
+            <button
+              type="button"
+              disabled={reviewLoading !== null}
+              onClick={() => handleReview("reject")}
+              className="rounded-md bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reviewLoading === "reject" ? "Saving..." : "Reject Draft"}
+            </button>
+          </div>
+
+          {reviewStatus ? <p className="mt-2 text-xs text-emerald-700">{reviewStatus}</p> : null}
+        </div>
+      ) : null}
+
+      <p className="mt-3 text-xs text-slate-500">
+        Human approval is required before saving or sending any AI output.
+      </p>
+    </section>
+  );
+}
