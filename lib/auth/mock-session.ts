@@ -5,9 +5,9 @@ export async function getCurrentUser(): Promise<AppUser> {
   return {
     id: "user_1",
     schoolId: "school_1",
-    name: "Ava Thompson",
-    email: "ava.thompson@koku.school",
+    name: "Ashley Gaigher",
+    email: "ashley.gaigher@koku.school",
     role: "COUNSELOR",
-    schoolName: "North Valley High School",
+    schoolName: "NorthWest High School",
   };
 }

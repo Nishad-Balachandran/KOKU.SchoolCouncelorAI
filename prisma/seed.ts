@@ -22,7 +22,7 @@ async function main() {
 
   const school = await prisma.school.create({
     data: {
-      name: "North Valley High School",
+      name: "NorthWest High School",
       districtName: "KOKU Unified",
       stateCode: "CA",
     },
